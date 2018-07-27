@@ -24,6 +24,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Vector;
@@ -64,6 +65,7 @@ public class EvaluatorProcessor implements Processor {
   private long experimentStart = 0;
 
   private long sampleStart = 0;
+  private long sampleDuration = 0;
 
   private LearningCurve learningCurve;
   private int id;
@@ -83,10 +85,10 @@ public class EvaluatorProcessor implements Processor {
 
     if ((totalCount > 0) && (totalCount % samplingFrequency) == 0) {
       long sampleEnd = System.nanoTime();
-      long sampleDuration = TimeUnit.SECONDS.convert(sampleEnd - sampleStart, TimeUnit.NANOSECONDS);
+      sampleDuration = TimeUnit.MILLISECONDS.convert(sampleEnd - sampleStart, TimeUnit.NANOSECONDS);
       sampleStart = sampleEnd;
 
-      logger.info("{} seconds for {} instances", sampleDuration, samplingFrequency);
+      logger.info("{} milliseconds for {} instances", sampleDuration, samplingFrequency);
       this.addMeasurement();
     }
 
@@ -183,6 +185,7 @@ public class EvaluatorProcessor implements Processor {
   private void addMeasurement() {
     List<Measurement> measurements = new Vector<>();
     measurements.add(new Measurement(ORDERING_MEASUREMENT_NAME, totalCount));
+    measurements.add(new Measurement("duration (ms)", sampleDuration));
 
     Collections.addAll(measurements, evaluator.getPerformanceMeasurements());
 
@@ -195,6 +198,7 @@ public class EvaluatorProcessor implements Processor {
 
     if (immediateResultStream != null) {
       if (firstDump) {
+        immediateResultStream.println("# TIME: " + LocalDateTime.now() + " ");
         immediateResultStream.println(learningCurve.headerToString());
         firstDump = false;
       }
