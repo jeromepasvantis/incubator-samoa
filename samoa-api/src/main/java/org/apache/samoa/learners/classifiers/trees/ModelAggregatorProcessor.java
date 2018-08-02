@@ -138,6 +138,10 @@ public final class ModelAggregatorProcessor implements Processor {
       // for each of the nodes
       if (this.foundNodeSet != null) {
         for (FoundNode foundNode : this.foundNodeSet) {
+          if (foundNode.getNode() == null) {
+            logger.error("foundNode.getNode() is null for an instance ");
+            continue;
+          }
           ActiveLearningNode leafNode = (ActiveLearningNode) foundNode.getNode();
           AttributeBatchContentEvent[] abce = leafNode.getAttributeBatchContentEvent();
           if (abce != null) {

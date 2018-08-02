@@ -56,6 +56,7 @@ public class EvaluatorProcessor implements Processor {
   private final File dumpFile;
   private final File predictionFile;
   private final int labelSamplingFrequency;
+  private String argString = null;
   private transient PrintStream immediateResultStream = null;
   private transient PrintStream immediatePredictionStream = null;
   private transient boolean firstDump = true;
@@ -69,13 +70,17 @@ public class EvaluatorProcessor implements Processor {
 
   private LearningCurve learningCurve;
   private int id;
+  private File latencyStatFile;
+  private PrintStream latencyStatStream;
 
   private EvaluatorProcessor(Builder builder) {
     this.evaluator = builder.evaluator;
     this.samplingFrequency = builder.samplingFrequency;
     this.dumpFile = builder.dumpFile;
+    this.latencyStatFile = builder.latencyFile;
     this.predictionFile = builder.predictionFile;
     this.labelSamplingFrequency = builder.labelSamplingFrequency;
+    this.argString = builder.argString;
   }
 
   @Override
@@ -139,6 +144,26 @@ public class EvaluatorProcessor implements Processor {
       }
     }
 
+    if (this.latencyStatFile != null) {
+      try {
+        if (latencyStatFile.exists()) {
+          this.latencyStatStream = new PrintStream(
+                  new FileOutputStream(latencyStatFile, true), true);
+        } else {
+          this.latencyStatStream = new PrintStream(
+                  new FileOutputStream(latencyStatFile), true);
+        }
+
+      } catch (FileNotFoundException e) {
+        this.latencyStatStream = null;
+        logger.error("File not found exception for {}:{}", this.latencyStatFile.getAbsolutePath(), e.toString());
+
+      } catch (Exception e) {
+        this.latencyStatStream = null;
+        logger.error("Exception when creating {}:{}", this.latencyStatFile.getAbsolutePath(), e.toString());
+      }
+    }
+
     if (this.predictionFile != null) {
       try {
         this.immediatePredictionStream = new PrintStream(new FileOutputStream(predictionFile), true);
@@ -185,7 +210,7 @@ public class EvaluatorProcessor implements Processor {
   private void addMeasurement() {
     List<Measurement> measurements = new Vector<>();
     measurements.add(new Measurement(ORDERING_MEASUREMENT_NAME, totalCount));
-    measurements.add(new Measurement("duration (ms)", sampleDuration));
+    measurements.add(new Measurement("throughput (instances/ms)", (((double)samplingFrequency)/sampleDuration)));
 
     Collections.addAll(measurements, evaluator.getPerformanceMeasurements());
 
@@ -196,16 +221,32 @@ public class EvaluatorProcessor implements Processor {
     logger.debug("evaluator id = {}", this.id);
     logger.info(learningEvaluation.toString());
 
-    if (immediateResultStream != null) {
-      if (firstDump) {
-        immediateResultStream.println("# TIME: " + LocalDateTime.now() + " ");
-        immediateResultStream.println(learningCurve.headerToString());
-        firstDump = false;
-      }
+    if (firstDump) {
+      if (immediateResultStream != null) {
 
+        if (argString == null) {
+          argString = "null";
+        }
+
+        immediateResultStream.println("# START TIME: " + LocalDateTime.now() + " with arguments " + argString );
+        immediateResultStream.println(learningCurve.headerToString());
+      }
+      if (latencyStatStream != null) {
+        latencyStatStream.println("Number of instances sent, Nano Time (long), LocalDateTime.now()");
+        latencyStatStream.flush();
+      }
+      firstDump = false;
+    }
+
+    if (immediateResultStream != null) {
       immediateResultStream.println(learningCurve.entryToString(learningCurve.numEntries() - 1));
       immediateResultStream.flush();
     }
+    if (latencyStatStream != null) {
+      latencyStatStream.println(totalCount + "," + System.nanoTime() + "," + LocalDateTime.now());
+      latencyStatStream.flush();
+    }
+
   }
 
   /**
@@ -250,6 +291,10 @@ public class EvaluatorProcessor implements Processor {
     // (totalCount/totalExperimentTime));
   }
 
+  public void setLatencyStatFile(File latencyStatFile) {
+    this.latencyStatFile = latencyStatFile;
+  }
+
   public static class Builder {
 
     private final PerformanceEvaluator evaluator;
@@ -257,6 +302,8 @@ public class EvaluatorProcessor implements Processor {
     private File dumpFile = null;
     private File predictionFile = null;
     private int labelSamplingFrequency = 1;
+    private File latencyFile = null;
+    private String argString;
 
     public Builder(PerformanceEvaluator evaluator) {
       this.evaluator = evaluator;
@@ -267,7 +314,9 @@ public class EvaluatorProcessor implements Processor {
       this.samplingFrequency = oldProcessor.samplingFrequency;
       this.dumpFile = oldProcessor.dumpFile;
       this.predictionFile = oldProcessor.predictionFile;
+      this.latencyFile = oldProcessor.latencyStatFile;
       this.labelSamplingFrequency = oldProcessor.labelSamplingFrequency;
+      this.argString = oldProcessor.argString;
     }
 
     public Builder samplingFrequency(int samplingFrequency) {
@@ -292,6 +341,16 @@ public class EvaluatorProcessor implements Processor {
 
     public EvaluatorProcessor build() {
       return new EvaluatorProcessor(this);
+    }
+
+    public Builder latencyFile(File file) {
+      this.latencyFile = file;
+      return this;
+    }
+
+    public Builder getArgsStringWorkaround(String argString) {
+      this.argString = argString;
+      return this;
     }
   }
 }

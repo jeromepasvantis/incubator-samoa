@@ -110,6 +110,14 @@ public class PrequentialEvaluation implements Task, Configurable {
   public IntOption batchDelayOption = new IntOption("delayBatchSize", 'b',
       "The delay batch size: delay of x milliseconds after each batch ", 1, 1, Integer.MAX_VALUE);
 
+  public FileOption latencyInFileOption = new FileOption("latencyInFileOption", 'x',
+          "File to append latency stats for incoming instances",
+          null, "csv", true);
+
+  public FileOption latencyOutFileOption = new FileOption("latencyOutFileOption", 'y',
+          "File to append latency stats for finished instances",
+          null, "csv", true);
+
   protected PrequentialSourceProcessor preqSource;
 
   // private PrequentialSourceTopologyStarter preqStarter;
@@ -156,6 +164,8 @@ public class PrequentialEvaluation implements Task, Configurable {
     preqSource.setMaxNumInstances(instanceLimitOption.getValue());
     preqSource.setSourceDelay(sourceDelayOption.getValue());
     preqSource.setDelayBatchSize(batchDelayOption.getValue());
+    preqSource.setLatencyStatFile(latencyInFileOption.getFile());
+    preqSource.setSamplingFrequency(sampleFrequencyOption.getValue());
     builder.addEntranceProcessor(preqSource);
     logger.debug("Successfully instantiating PrequentialSourceProcessor");
 
@@ -179,7 +189,8 @@ public class PrequentialEvaluation implements Task, Configurable {
     }
     evaluator = new EvaluatorProcessor.Builder(evaluatorOptionValue)
         .samplingFrequency(sampleFrequencyOption.getValue()).dumpFile(dumpFileOption.getFile())
-        .predictionFile(resultFileOption.getFile()).labelSamplingFrequency(labelSampleFrequencyOption.getValue())
+        .predictionFile(resultFileOption.getFile()).latencyFile(latencyOutFileOption.getFile())
+            .labelSamplingFrequency(labelSampleFrequencyOption.getValue()).getArgsStringWorkaround(biuldArgStringWorkaround())
         .build();
 
     // evaluatorPi = builder.createPi(evaluator);
@@ -194,6 +205,8 @@ public class PrequentialEvaluation implements Task, Configurable {
     prequentialTopology = builder.build();
     logger.debug("Successfully building the topology");
   }
+
+
 
   @Override
   public void setFactory(ComponentFactory factory) {
@@ -229,5 +242,15 @@ public class PrequentialEvaluation implements Task, Configurable {
     }
     // Default to BasicClassificationPerformanceEvaluator for all other cases
     return new BasicClassificationPerformanceEvaluator();
+  }
+
+  private String biuldArgStringWorkaround() {
+    StringBuilder argString = new StringBuilder();
+    argString.append("[learner: " + learnerOption.getValueAsCLIString() + "] ")
+            .append("[data: " + streamTrainOption.getValueAsCLIString()+ "] ")
+            .append("[resultFile: " + resultFileOption.getValueAsCLIString()+ "] ")
+            .append("[latencyInFile: " + latencyInFileOption.getValueAsCLIString()+ "] ")
+            .append("[latencyOutFile: " + latencyOutFileOption.getValueAsCLIString()+ "] ");
+    return argString.toString();
   }
 }

@@ -20,6 +20,11 @@ package org.apache.samoa.streams;
  * #L%
  */
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+import java.time.LocalDateTime;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -65,6 +70,9 @@ public final class PrequentialSourceProcessor implements EntranceProcessor {
   private int delay = 0;
   private int batchSize = 1;
   private boolean finished = false;
+  private File latencyStatFile;
+  private int samplingFrequency;
+  private PrintStream latencyStatStream;
 
   @Override
   public boolean process(ContentEvent event) {
@@ -105,6 +113,16 @@ public final class PrequentialSourceProcessor implements EntranceProcessor {
         schedule = timer.scheduleWithFixedDelay(new DelayTimeoutHandler(this), delay, delay,
             TimeUnit.MICROSECONDS);
       }
+
+      // numInsctancesSent is 1-based, so the first ContentEvent will have index 1, but other counters for latency are
+      // 0-based. To meassure the same Event, we subtract 1 here in the modulo operation
+      if ((numInstanceSent > 1) && ((numInstanceSent - 1) % samplingFrequency) == 0) {
+        if (latencyStatStream != null) {
+          latencyStatStream.println(numInstanceSent -1  + "," + System.nanoTime() + "," + LocalDateTime.now());
+          latencyStatStream.flush();
+        }
+      }
+
     }
     return contentEvent;
   }
@@ -121,6 +139,29 @@ public final class PrequentialSourceProcessor implements EntranceProcessor {
   public void onCreate(int id) {
     initStreamSource(sourceStream);
     timer = Executors.newScheduledThreadPool(1);
+
+    if (this.latencyStatFile != null) {
+      try {
+        if (latencyStatFile.exists()) {
+          this.latencyStatStream = new PrintStream(
+                  new FileOutputStream(latencyStatFile, true), true);
+        } else {
+          this.latencyStatStream = new PrintStream(
+                  new FileOutputStream(latencyStatFile), true);
+        }
+
+      } catch (FileNotFoundException e) {
+        this.latencyStatStream = null;
+        logger.error("File not found exception for {}:{}", this.latencyStatFile.getAbsolutePath(), e.toString());
+
+      } catch (Exception e) {
+        this.latencyStatStream = null;
+        logger.error("Exception when creating {}:{}", this.latencyStatFile.getAbsolutePath(), e.toString());
+      }
+      latencyStatStream.println("Number of instances sent, Nano Time (long), LocalDateTime.now()");
+      latencyStatStream.flush();
+    }
+
     logger.debug("Creating PrequentialSourceProcessor with id {}", id);
   }
 
@@ -213,6 +254,14 @@ public final class PrequentialSourceProcessor implements EntranceProcessor {
 
   public void setDelayBatchSize(int batch) {
     this.batchSize = batch;
+  }
+
+  public void setLatencyStatFile(File latencyStatFile) {
+    this.latencyStatFile = latencyStatFile;
+  }
+
+  public void setSamplingFrequency(int samplingFrequency) {
+    this.samplingFrequency = samplingFrequency;
   }
 
   private class DelayTimeoutHandler implements Runnable {
