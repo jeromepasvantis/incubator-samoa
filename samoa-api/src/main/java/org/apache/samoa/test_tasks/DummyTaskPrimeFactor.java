@@ -51,6 +51,9 @@ public class DummyTaskPrimeFactor implements Task, Configurable {
     public IntOption numberToFactor = new IntOption("numberToFactor", 's',
             "Number to check for Prime Factors", 999777,
             1, Integer.MAX_VALUE);
+    public IntOption sampleFrequency = new IntOption("sampleFrequency", 'f',
+            "How often to sample Stats", 100,
+            1, Integer.MAX_VALUE);
 
     public FileOption statFile = new FileOption("statFile", 'd', "File to append statistics to",
             null, "csv", true);
@@ -62,7 +65,7 @@ public class DummyTaskPrimeFactor implements Task, Configurable {
     String topologyName = "DummyTask";
 
     public void getDescription(StringBuilder sb, int indent) {
-        sb.append("Palindrome Tak");
+        sb.append("Dummy Tak");
     }
 
     @Override
@@ -89,7 +92,7 @@ public class DummyTaskPrimeFactor implements Task, Configurable {
         builder.connectInputShuffleStream(streamSourceToWorker, pfProcessor);
         logger.debug("Successfully instantiating PrimeFactorProcessor");
 
-        DummyOutProcessor outputProcessor = new DummyOutProcessor(statFile.getFile());
+        DummyOutProcessor outputProcessor = new DummyOutProcessor(statFile.getFile(), sampleFrequency.getValue());
 
         builder.addProcessor(outputProcessor);
 

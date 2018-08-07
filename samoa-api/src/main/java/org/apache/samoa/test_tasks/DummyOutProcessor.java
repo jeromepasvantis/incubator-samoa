@@ -41,25 +41,45 @@ public class DummyOutProcessor implements Processor{
     int numEvents;
     File statFile;
 
+    int sampleFrequency;
+    long sampleStartTime;
+    float currentThroughput;
+
     private static Logger logger = LoggerFactory.getLogger(org.apache.samoa.test_tasks.DummyOutProcessor.class);
 
 
     PrintStream outputStream;
 
-    DummyOutProcessor(File file) {
+    DummyOutProcessor(File file, int sampleFrequency) {
         this.statFile = file;
+        this.sampleFrequency = sampleFrequency;
     }
     @Override
     public boolean process(ContentEvent event) {
         DummyTaskPrimeFactor.FactorContentEvent incoming = (DummyTaskPrimeFactor.FactorContentEvent) event;
         long timeInPipeline = TimeUnit.MILLISECONDS.convert(System.nanoTime() - incoming.timestamp, TimeUnit.NANOSECONDS);
-        outputStream.println(numEvents + "," + incoming.number + "," + timeInPipeline);
-        logger.info("{" + numEvents + "} "
-                + incoming.number
-                + " -> " + Arrays.toString(incoming.factors.toArray())
-                + "(duration (ms): "
-                + timeInPipeline
-                + ") ");
+
+
+        if (numEvents == 0) {
+            sampleStartTime = System.nanoTime();
+        }
+
+        if ((((numEvents + 1) % sampleFrequency) == 0) && numEvents > 0) {
+
+            long sampleTime = System.nanoTime() - sampleStartTime;
+            currentThroughput = (float) sampleFrequency / TimeUnit.MILLISECONDS.convert(sampleTime, TimeUnit.NANOSECONDS);
+            sampleStartTime = System.nanoTime();
+
+            outputStream.println(numEvents + "," + incoming.number + "," + timeInPipeline + "," + currentThroughput);
+            System.out.println("{" + numEvents + "} "
+                    + incoming.number
+                    + " -> " + Arrays.toString(incoming.factors.toArray())
+                    + "(latency (ms): "
+                    + timeInPipeline
+                    + ") "
+                    + "(througput for last " + sampleFrequency + " elements (ms): "
+                    + currentThroughput);
+        }
         numEvents++;
         return true;
     }
@@ -67,6 +87,8 @@ public class DummyOutProcessor implements Processor{
     @Override
     public void onCreate(int id) {
         this.numEvents = 0;
+        this.sampleStartTime = 0;
+        this.currentThroughput = 0;
         if (this.statFile != null) {
             try {
                 if (statFile.exists()) {
@@ -81,18 +103,15 @@ public class DummyOutProcessor implements Processor{
                 this.outputStream = null;
                 //logger.error("File not found exception for {}:{}", this.latencyStatFile.getAbsolutePath(), e.toString());
 
-            } catch (Exception e) {
-                this.outputStream = null;
-                //logger.error("Exception when creating {}:{}", this.latencyStatFile.getAbsolutePath(), e.toString());
             }
             outputStream.println("START TIME: " + LocalDateTime.now());
-            outputStream.println("Event Number, " + "Number to Factor, " + "duration");
+            outputStream.println("Event Number, " + "Number to Factor, " + "latency, " + "througput for last " + sampleFrequency + " elements (ms): ");
 
         }
     }
 
     @Override
     public Processor newProcessor(Processor processor) {
-        return new DummyOutProcessor(this.statFile);
+        return new DummyOutProcessor(this.statFile, this.sampleFrequency);
     }
 }
